@@ -1,0 +1,79 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Archive feature.
+ */
+
+include_once 'gov_archive.features.inc';
+/**
+ * @file
+ * Defines the 'archived' field base and handles logic for archiving content.
+ */
+
+define('GOV_ARCHIVE_PATH_PREFIX', 'archives/');
+
+/**
+ * Implements hook_node_validate().
+ */
+function gov_archive_node_validate($node, $form, &$form_state) {
+  $archived = gov_archive_node_is_archived($node);
+  // If the node is archived and a user has manually set a path alias,
+  // ensure that the alias contains 'archive/' prefix.
+  if ($archived && !$node->path['pathauto']) {
+    if (!gov_archive_alias_matches_archived_pattern($node->path['alias'])) {
+      form_set_error('path', t('You are archiving a node that uses a manually created path alias. Please change the path alias so that it begins with "@prefix".', array('@prefix' => GOV_ARCHIVE_PATH_PREFIX)));
+    }
+  }
+}
+
+/**
+ * Implements hook_pathauto_alias_alter().
+ *
+ * Note that this function is only called on node update if
+ * pathauto_update_action is not set to O.
+ */
+function gov_archive_pathauto_alias_alter(&$alias, array &$context) {
+  if ($context['module'] == 'node' && !empty($context['data']['node'])) {
+    $node = $context['data']['node'];
+
+    // If the node is archived and it is using an automatically generated alias,
+    // ensure that alias is prefixed with '/archive'.
+    $archived = gov_archive_node_is_archived($node);
+    if ($archived && !gov_archive_alias_matches_archived_pattern($alias)) {
+      $alias = GOV_ARCHIVE_PATH_PREFIX . $alias;
+    }
+  }
+}
+
+/**
+ * Determine if an alias is using the archived pathauto pattern.
+ *
+ * @param string $alias
+ *   The node alias.
+ *
+ * @return bool
+ *   TRUE if the alias is using the archived pathauto pattern.
+ */
+function gov_archive_alias_matches_archived_pattern($alias) {
+  return !(strpos($alias, GOV_ARCHIVE_PATH_PREFIX) === FALSE);
+}
+
+/**
+ * Determines whether a given node is archived.
+ *
+ * @param object $node
+ *   The node to check.
+ *
+ * @return bool
+ *   TRUE is node is archived.
+ */
+function gov_archive_node_is_archived($node) {
+  $archived = FALSE;
+
+  $field_items = field_get_items('node', $node, 'field_archived');
+  if (!empty($field_items[0]['value'])) {
+    $archived = (bool) $field_items[0]['value'];
+  }
+
+  return $archived;
+}
