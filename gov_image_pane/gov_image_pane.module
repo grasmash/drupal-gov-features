@@ -1,0 +1,42 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Image Pane feature.
+ */
+
+include_once 'gov_image_pane.features.inc';
+/**
+ * @file
+ * Code for the GOV Image Pane feature.
+ */
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * Defines the image bundle for fieldable panels panes.
+ */
+function gov_image_pane_entity_info_alter(&$entity_info) {
+  $entity_info['fieldable_panels_pane']['bundles']['image'] = array(
+    'label' => t('Image pane'),
+    'pane category' => t('Fielded panes'),
+    'pane top level' => FALSE,
+    // 'pane icon' => '/path/to/custom/icon/for/this/pane.png',
+    'admin' => array(
+      'path' => 'admin/structure/fieldable-panels-panes/manage/%fieldable_panels_panes_type',
+      'bundle argument' => 4,
+      // Note that this has all _ replaced with - from the bundle name.
+      'real path' => 'admin/structure/fieldable-panels-panes/manage/image',
+      'access arguments' => array('administer fieldable panels panes'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+function gov_image_pane_preprocess_field(&$variables) {
+  if ($variables['element']['#field_name'] == 'field_image_pane_image') {
+    drupal_add_js(drupal_get_path('module', 'gov_image_pane') . '/gov_image_pane.js');
+    drupal_add_css(drupal_get_path('module', 'gov_image_pane') . '/gov_image_pane.css');
+  }
+}
