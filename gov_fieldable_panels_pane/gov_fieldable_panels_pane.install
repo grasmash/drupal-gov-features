@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * Install file for GOV Fieldable Panels Pane.
+ */
+
+/**
+ * Revert feature.
+ */
+function gov_fieldable_panels_pane_update_7000(&$sandbox) {
+  features_revert_module('gov_fieldable_panels_pane');
+}

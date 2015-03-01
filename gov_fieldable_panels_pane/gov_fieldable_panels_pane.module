@@ -1,0 +1,246 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Fieldable Panels Pane feature.
+ */
+
+include_once 'gov_fieldable_panels_pane.features.inc';
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function gov_fieldable_panels_pane_entity_info_alter(&$entity_info) {
+  $entity_info['fieldable_panels_pane']['bundles']['fieldable_panels_pane']['label'] = t('Basic pane');
+}
+
+/**
+ * Implements hook_og_permission().
+ */
+function gov_fieldable_panels_pane_og_permission() {
+  $perms = array();
+  $fpp_info = entity_get_info('fieldable_panels_pane');
+  $bundles = array_keys($fpp_info['bundles']);
+
+  // For each type of fpp, define a set of group-specific permissions.
+  foreach ($bundles as $bundle) {
+    $perms = array_merge($perms, gov_fieldable_panels_pane_list_permissions($bundle));
+  }
+
+  return $perms;
+}
+
+/**
+ * Helper function to generate standard node permission list for a given type.
+ *
+ * @param string $type
+ *   The machine-readable name of the node type.
+ *
+ * @return array
+ *   An array of permission names and descriptions.
+ *
+ * @see og_list_permissions()
+ */
+function gov_fieldable_panels_pane_list_permissions($type) {
+
+  $fpp_info = entity_get_info('fieldable_panels_pane');
+  $info = $fpp_info['bundles'][$type];
+  $perms = array();
+
+  // Check type is of group content.
+  if (og_is_group_content_type('fieldable_panels_pane', $type)) {
+    // Build standard list of permissions for this type.
+    $perms += array(
+      "create fieldable $type" => array(
+        'title' => t('Create %type_name', array('%type_name' => $info['label'])),
+      ),
+      "update fieldable $type" => array(
+        'title' => t('Edit %type_name', array('%type_name' => $info['label'])),
+      ),
+      "delete fieldable $type" => array(
+        'title' => t('Delete %type_name', array('%type_name' => $info['label'])),
+      ),
+    );
+
+    if (!module_exists('entityreference_prepopulate')) {
+      // We allow the create permission only on members, as otherwise we would
+      // have to iterate over every single group to decide if the user has
+      // permissions for it.
+      $perms["create fieldable $type"]['roles'] = array(OG_AUTHENTICATED_ROLE);
+    }
+
+    // Add default permissions.
+    foreach ($perms as $key => $value) {
+      $perms[$key]['default role'] = array(OG_AUTHENTICATED_ROLE);
+    }
+  }
+  return $perms;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function gov_fieldable_panels_pane_menu_alter(&$items) {
+  // Override default admin view with our own, feature-exported view.
+  $item = &$items['admin/structure/fieldable-panels-panes/manage/%fieldable_panels_panes_type'];
+  $item['page callback'] = 'gov_fieldable_panels_panes_entities_list_page';
+  unset($item['file']);
+}
+
+/**
+ * List all entities for the given type.
+ */
+function gov_fieldable_panels_panes_entities_list_page($type) {
+  return views_embed_view('fieldable_pane_entities_admin', 'default', $type);
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function gov_fieldable_panels_pane_entity_presave($entity, $type) {
+  if (!empty($entity->is_new) && $type == 'fieldable_panels_pane') {
+    $entity->reusable = 1;
+
+    // Set default category and admin title.
+    if (empty($entity->category)) {
+      $entity->category = t('Existing fielded panes');
+    }
+    if (empty($entity->admin_title)) {
+      $entity->admin_title = $entity->title;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function gov_fieldable_panels_pane_form_alter(&$form, &$form_state, $form_id) {
+  switch ($form_id) {
+    case 'fieldable_panels_panes_entity_edit_form':
+    case 'fieldable_panels_panes_fieldable_panels_pane_content_type_edit_form':
+
+      // If we are editing an existing fpp entity, verify that this current user
+      // has organic group level access to update this entity.
+      if (!empty($form['#entity'])) {
+        $entity = $form['#entity'];
+
+        if (!empty($form_state['op']) && $form_state['op'] == 'edit' && empty($entity->is_new) && !user_access('administer group')) {
+          // This permisson is provided by
+          // gov_fieldable_panels_pane_og_permission().
+          $perm = 'update fieldable ' . $entity->bundle;
+          $og_access = og_user_access_entity($perm, 'fieldable_panels_pane', $entity);
+
+          // If the user should not have access to edit this, then rebuild form
+          // with only a message and a 'cancel' button.
+          if (!$og_access) {
+            $deny_form = array();
+            $deny_form['message'] = array(
+              '#markup' => t('You do not have permission to edit this pane.'),
+            );
+            $deny_form['buttons'] = $form['buttons'];
+            unset($deny_form['buttons']['return']);
+            $deny_form['form_id'] = $form['form_id'];
+            $deny_form['form_token'] = $form['form_token'];
+            $deny_form['#type'] = $form['#type'];
+            $form = $deny_form;
+          }
+        }
+      }
+
+      // Force all FPPs to be reusable and in "full" display mode.
+      if (!user_access('administer fieldable panels panes')) {
+        $form['view_mode']['#access'] = FALSE;
+        $form['reusable']['reusable']['#access'] = FALSE;
+      }
+      $form['reusable']['reusable']['#default_value'] = 1;
+
+      // Add a default, unchangable category for all existing fieldable panels
+      // panes.
+      if (empty($form['reusable']['category']['#default_value'])) {
+        $form['reusable']['category']['#default_value'] = t('Existing fielded panes');
+      }
+      $form['title']['#title'] = t('Display title');
+      $form['title']['#description'] = t('This is the title that is publicly visible.');
+      $form['#validate'][] = 'gov_fieldable_panels_pane_new_fpp_validate';
+
+      break;
+
+    case 'panels_common_settings':
+      // Remove specific entities from fpp options on administrative config
+      // pages. This keeps the UI and Feature exports reasonably slim.
+      // By default, these entities will still be available as Panels content.
+      // The og_fpp module will further limit listed Panel panes according to OG
+      // membership.
+      // @see gov_fieldable_panels_pane_file_pane_options().
+      $options =& $form['content_types']['fieldable_panels_pane']['options']['#options'];
+      $filtered_options = array_filter(array_keys($options), 'gov_fieldable_panels_pane_file_pane_options');
+      $filtered_options = drupal_map_assoc($filtered_options);
+      $options = array_intersect_key($options, $filtered_options);
+
+      break;
+  }
+}
+
+/**
+ * Validation callback for fieldable panel pane create forms.
+ */
+function gov_fieldable_panels_pane_new_fpp_validate(&$form, &$form_state) {
+  if (!empty($form['title']['#input'])
+    && empty($form_state['values']['title'])
+    && empty($form_state['values']['admin_title'])) {
+    form_set_error('admin_title', t('If you do not set a Display title, you must at least set an Administrative title.'));
+  }
+}
+
+/**
+ * Used as a callback for array_filter() to remove fpp entities from options.
+ *
+ * By default, fieldable_panels_panes will list every FPP entity on the
+ * Panelizer 'allowed content' page. If there are hundreds or thousands of
+ * these entities, there will be hundreds or thousands of checkboxes. This
+ * would also cause massive feature exports.
+ *
+ * To prevent this, we remove specific entities from the options, and leave
+ * only the options that allow creation of new FPP entities.
+ *
+ * @param string $value
+ *   The value of a single array row.
+ *
+ * @return bool
+ *   TRUE if row should be kept.
+ */
+function gov_fieldable_panels_pane_file_pane_options($value) {
+  // Filters out any value containing 'uuid' string.
+  return (bool) !strstr($value, 'uuid:');
+}
+
+/**
+ * Implements hook_og_fpp_membership_restrictions_alter().
+ */
+function gov_fieldable_panels_pane_og_fpp_membership_restrictions_alter(&$restrictions, $entity, $entity_type) {
+  // Extend restrictions such that fpps from the parent group of current group
+  // are also available to be added.
+  if ($entity_type == 'node' && isset($entity->type)) {
+    $entity = entity_load_single('node', $entity->nid);
+    $groups = field_get_items($entity_type, $entity, 'og_group_ref');
+    if ($groups) {
+      $group = reset($groups);
+      $group_nid = $group['target_id'];
+
+      switch ($entity->type) {
+        case 'organization':
+          $restrictions[] = $entity_type . '-' . $group_nid;
+          break;
+
+        case 'landing_page':
+          // Load group node, then load the group's parent group.
+          $group_node = entity_load_single('node', $group_nid);
+          $group_parents = og_get_entity_groups('node', $group_node);
+          if (!empty($group_parents['node'])) {
+            $group_parent_nid = reset($group_parents['node']);
+            $restrictions[] = $entity_type . '-' . $group_parent_nid;
+          }
+          break;
+      }
+    }
+  }
+}
