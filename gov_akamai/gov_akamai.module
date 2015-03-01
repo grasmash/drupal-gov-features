@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * @file
+ * Akamai integration for GOV.
+ */
+
+/**
+ * Implements hook_akamai_paths_alter().
+ */
+function gov_akamai_akamai_paths_alter(&$paths, $node) {
+  // Removing node/nid paths because they are blocked on the edge and throw
+  // Error Clearing Akamai Cache 322: You are not authorized to purge this URL.
+  if (strstr($paths['0'], 'node')) {
+    unset($paths['0']);
+  }
+}
+
+/**
+ * Implements hook_acquia_purge_path_purge().
+ */
+function gov_akamai_acquia_purge_path_purge($path, $overall_success) {
+  // Purge Akamai.
+  watchdog('gov_akamai', 'Purging @path from Akamai', array('@path' => $path));
+  akamai_clear_url($path);
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function gov_akamai_form_alter(&$form, &$form_state, $form_id) {
+  if (!variable_get('is_edit_domain', FALSE)) {
+    // Unique form IDs are problematic when behind Akamai so we unset them.
+    unset($form['#token']);
+    unset($form['form_token']);
+  }
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function gov_akamai_node_view($node, $view_mode, $langcode) {
+  if ($view_mode == 'full') {
+    switch ($node->type) {
+      case 'landing_page':
+      case 'organization':
+        // Override default Akamai cache expiration.
+        gov_akamai_cache_expiration_override();
+
+        break;
+    }
+  }
+}
+
+/**
+ * Implements hook_views_pre_render().
+ */
+function gov_akamai_views_post_render(&$view, &$output, &$cache) {
+  // Override default Akamai cache expiration for all page displays.
+  // The views cache for page displays should already be disabled (set to
+  // a time-based cache with a cache lifetime of 0 to bypass views cache bully).
+  // Viewing caching is redundant for page displays given the use of Varnish
+  // in Acquia cloud.
+  if ($view->display_handler->plugin_name == 'page' || $view->display_handler->plugin_name == 'rss') {
+    gov_akamai_cache_expiration_override();
+  }
+}
+
+/**
+ * Overrides the default Akamai edge cache expiration, defaults to 30 minutes.
+ *
+ * Documentation from Akamai:
+ *
+ * You can specify time-to-live in a response header using the Edge-Control
+ * header cache-maxage. Examples:
+ *   Edge-Control: cache-maxage=90m
+ *   Edge-Control: cache-maxage=1h
+ *   Edge-Control: cache-maxage=5d
+ *
+ * Cache-maxage takes as its content an integer followed by a unit specifier.
+ * Current unit specifiers are: 's' (seconds), 'm' (minutes), 'h' (hours),
+ * 'd' (days); these are not case sensitive.
+ *
+ * The Edge-Control header also accepts syntax similar to
+ * Cache-Control: max-age. E.g., "Edge-Control: max-age=90".
+ * That is, you can spell “max-age” with the hyphen, and list a number of
+ * seconds.
+ *
+ * @param string $max_age
+ *   Optional. Defaults to 30m. The maximum age of the Akamai cache for this
+ *   page. See "Documentation from Akamai" above for more detail.
+ *
+ * @see https://control.akamai.com/dl/customers/other/EDGESERV/About_TTL.pdf
+ * @see https://control.akamai.com/dl/customers/other/EDGESERV/ESConfigGuide-Customer.pdf
+ */
+function gov_akamai_cache_expiration_override($max_age = '30m') {
+  drupal_add_http_header('Edge-control', 'cache-maxage=' . $max_age);
+}

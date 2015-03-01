@@ -1,0 +1,6 @@
+name = Gov Akamai
+description = Akamai integration for Government sites.
+core = 7.x
+package = Gov Features
+
+dependencies[] = akamai
