@@ -1,0 +1,33 @@
+<?php
+/**
+ * @file
+ * Code for the GOV User feature.
+ */
+
+include_once 'gov_user.features.inc';
+
+/**
+ * Implements hook_form_alter().
+ */
+function gov_user_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == "user_login") {
+    // Disable user form. By default, it is not disabled. $conf settings in
+    // settings.php hardcode this value to TRUE for applicable environments.
+    // This allows Behat tests to successfully login without explicity vsetting
+    // the value of this variable.
+    $disable = variable_get("gov_user_disable_user_form", FALSE);
+    if ($disable) {
+      $form['name']['#access'] = FALSE;
+      $form['pass']['#access'] = FALSE;
+      unset($form['actions']);
+      unset($form["#submit"]);
+    }
+  }
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function gov_user_menu_alter(&$items) {
+  unset($items["user/password"]);
+}

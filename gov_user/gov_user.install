@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * Install GOV Users.
+ */
+
+/**
+ * Reverting feature.
+ */
+function gov_user_update_7000(&$sandbox) {
+  features_revert_module('gov_user');
+}
