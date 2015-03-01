@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Gallery feature.
+ */
+
+include_once 'gov_gallery.features.inc';
