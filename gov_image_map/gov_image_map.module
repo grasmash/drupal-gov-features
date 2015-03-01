@@ -1,0 +1,33 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Image Map feature.
+ */
+
+include_once 'gov_image_map.features.inc';
+
+/**
+ * Implements hook_node_view().
+ */
+function gov_image_map_node_view($node, $view_mode, $langcode) {
+  if ($node->type == 'image_map' && $view_mode == 'full') {
+
+    $types = field_get_items('node', $node, 'field_imap_map_type');
+    $map_type = check_plain($types['0']['value']);
+
+    module_load_include('inc', 'gov_image_map', 'includes/gov_image_map');
+
+    switch ($map_type) {
+      case 'usa':
+        // Prepare image map node of type 'usa' for display.
+        gov_image_map_usa_prepare($node, $view_mode);
+        break;
+
+      case 'custom':
+        gov_image_map_custom_prepare($node, $view_mode);
+        break;
+    }
+
+    drupal_add_library('jq_maphilight', 'jquery.maphilight');
+  }
+}
