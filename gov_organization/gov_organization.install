@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * Install file for GOV Organization.
+ */
+
+/**
+ * Revert gov_organization to add abbreviation title field.
+ */
+function gov_organization_update_7000(&$sandbox) {
+  features_revert_module('gov_organization');
+}

@@ -1,0 +1,156 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Organization feature.
+ */
+
+include_once 'gov_organization.features.inc';
+
+/**
+ * Implements hook_views_api().
+ */
+function gov_organization_views_api() {
+  return array(
+    'api' => '3',
+  );
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function gov_organization_block_info() {
+  $blocks = array(
+    'og_single_menu_superfish_block' => array(
+      'info' => t('OG Menu : single (superfish)'),
+      'cache' => DRUPAL_NO_CACHE,
+    ),
+    'og_single_menu_second' => array(
+      'info' => t('OG Menu : single, second'),
+      'cache' => DRUPAL_NO_CACHE,
+    ),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ *
+ * @see og_menu_block_view()
+ */
+function gov_organization_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'og_single_menu_second':
+      $block = gov_organization_og_single_menu_second($delta);
+      break;
+
+    case 'og_single_menu_superfish_block':
+      $block = gov_organization_og_single_menu_superfish_block($delta);
+      break;
+  }
+
+  return $block;
+}
+
+
+/**
+ * Returns block content for the second OG menu of active group.
+ *
+ * @param string $delta
+ *   The block identifier.
+ *
+ * @return array
+ *   A renderable block array.
+ *
+ * @see og_menu_block_view
+ */
+function gov_organization_og_single_menu_second($delta) {
+  $block = array();
+  $context = og_context();
+
+  if ($context) {
+    $menus = og_menu_get_group_menus(array(
+      $context['group_type'] => array($context['gid']),
+    ));
+
+    if ($menus && count($menus) > 1) {
+      list($second_menu) = array_slice($menus, 1, 1);
+
+      if (!empty($second_menu)) {
+        if (variable_get('og_menu_block_links', FALSE)) {
+          $block['subject'] = l($second_menu['title'], $second_menu['group_type'] . '/' . $second_menu['gid']);
+        }
+        else {
+          $block['subject'] = check_plain($second_menu['title']);
+        }
+
+        $block['content'] = menu_tree($second_menu['menu_name']);
+        // Add contextual links.
+        if (in_array($second_menu['menu_name'], array_keys(menu_get_menus()))) {
+          $block['content']['#contextual_links']['og_menu'] = array('admin/structure/menu/manage', array($second_menu['menu_name']));
+        }
+      }
+    }
+
+  }
+
+  return $block;
+}
+
+/**
+ * Returns Superfish block content for the first OG menu of active group.
+ *
+ * @param string $delta
+ *   The block identifier.
+ *
+ * @return array
+ *   A renderable block array.
+ *
+ * @see og_menu_block_view
+ */
+function gov_organization_og_single_menu_superfish_block($delta) {
+  $block = array();
+  $context = og_context();
+
+  if ($context) {
+    $menus = og_menu_get_group_menus(array(
+      $context['group_type'] => array($context['gid']),
+    ));
+    $menu = array_shift($menus);
+
+    if ($menu) {
+      $menu_name = $menu['menu_name'];
+
+      if (variable_get('og_menu_block_links', FALSE)) {
+        $block['subject'] = l($menu['title'], $menu['group_type'] . '/' . $menu['gid']);
+      }
+      else {
+        $block['subject'] = check_plain($menu['title']);
+      }
+
+      $output = theme('nice_menus', array(
+        'id' => $delta,
+        'menu_name' => $menu_name,
+        'mlid' => !empty($menu['mlid']) ? $menu['mlid'] : NULL,
+        'direction' => 'down',
+        'depth' => '-1',
+        'respect_expanded' => 0,
+      ));
+
+      if ($output) {
+        $block['content']['#markup'] = $output['content'];
+
+        // Add contextual links.
+        if (in_array($menu['menu_name'], array_keys(menu_get_menus()))) {
+          $block['content']['#contextual_links']['og_menu'] = array('admin/structure/menu/manage', array($menu['menu_name']));
+        }
+      }
+      else {
+        $block['content'] = FALSE;
+      }
+    }
+  }
+
+  return $block;
+}
