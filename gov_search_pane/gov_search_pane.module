@@ -1,0 +1,28 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Search Pane feature.
+ */
+
+include_once 'gov_search_pane.features.inc';
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * Defines the usasearch bundle for fieldable panels panes.
+ */
+function gov_search_pane_entity_info_alter(&$entity_info) {
+  $entity_info['fieldable_panels_pane']['bundles']['usasearch'] = array(
+    'label' => t('USASearch'),
+    'pane category' => t('Fielded panes'),
+    'pane top level' => FALSE,
+    // 'pane icon' => '/path/to/custom/icon/for/this/pane.png',
+    'admin' => array(
+      'path' => 'admin/structure/fieldable-panels-panes/manage/%fieldable_panels_panes_type',
+      'bundle argument' => 4,
+      // Note that this has all _ replaced with - from the bundle name.
+      'real path' => 'admin/structure/fieldable-panels-panes/manage/usasearch',
+      'access arguments' => array('administer fieldable panels panes'),
+    ),
+  );
+}
