@@ -1,0 +1,216 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Org Chart feature.
+ */
+
+include_once 'gov_org_chart.features.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function gov_org_chart_menu() {
+  $items = array();
+
+  $items['node/%node/graphic'] = array(
+    'title callback' => 'node_page_title',
+    'title arguments' => array(1),
+    'page callback' => 'gov_org_chart_graphic',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 1),
+  );
+
+  $items['node/%node/chart'] = array(
+    'title callback' => 'node_page_title',
+    'title arguments' => array(1),
+    'page callback' => 'gov_org_chart_chart',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 1),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_node_view_alter().
+ */
+function gov_org_chart_node_view($node, $view_mode, $langcode) {
+
+  // Controls list (full) view, displayed at node/[nid].
+  if ($node->type == 'org_chart' && $view_mode == 'full') {
+
+    // Unset existing content for display.
+    $node->original_content = $node->content;
+    $children = element_children($node->content);
+    foreach ($children as $child) {
+      unset($node->content[$child]);
+    }
+
+    // Replace default content with a view.
+    $node->content['#view_name'] = 'org_chart';
+    $node->content['#display_id'] = 'list';
+    $node->content['#theme'] = 'org_chart';
+    $node->content['#node'] = $node;
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function gov_org_chart_theme() {
+  return array(
+    'org_chart' => array(
+      'variables' => array(
+        'view' => NULL,
+        'view_name' => NULL,
+        'node' => NULL,
+        'display_id' => 'default',
+      ),
+      'template' => 'org-chart',
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+function gov_org_chart_preprocess_org_chart(&$variables) {
+  $variables['tabs'] = gov_org_chart_tabs($variables['node']);
+  $variables['view'] = views_embed_view($variables['view_name'], $variables['display_id']);
+}
+
+/**
+ * Page callback for node/%node/graphic.
+ */
+function gov_org_chart_graphic($node) {
+  // Beautytip. The .bt-content div is hidden by default via CSS.
+  $options['org_chart_graphic'] = array(
+    'cssSelect' => '.view-display-id-graphic .views-row',
+    'contentSelector' => '$(this).find(".bt-content").html()',
+    'trigger' => array('mouseover', 'click'),
+    'style' => 'hulu',
+    'fill' => '#A6824B',
+    'trigger' => array('click'),
+  );
+  beautytips_add_beautytips($options);
+
+  $vars = array(
+    'view_name' => 'org_chart',
+    'display_id' => 'graphic',
+    'node' => $node,
+  );
+
+  return theme('org_chart', $vars);
+}
+
+/**
+ * Page callback for node/%node/chart.
+ */
+function gov_org_chart_chart($node) {
+
+  $image = field_view_field('node', $node, 'field_org_chart_image');
+  $image[0]['#item']['attributes'] = array(
+    'usemap' => '#org-chart-map',
+  );
+
+  // Prepare <area> tags in field_org_chart_imagemap by sanitizing and wrapping
+  // in a <map> tag.
+  $map = field_get_items('node', $node, 'field_org_chart_imagemap');
+  $area_tags = filter_xss($map['0']['value'], array('area'));
+  $map = array(
+    '#theme' => 'html_tag',
+    '#tag' => 'map',
+    '#value' => $area_tags,
+    '#attributes' => array(
+      'name' => 'org-chart-map',
+    ),
+  );
+
+  $image_map = array(
+    '#type' => 'container',
+    '#attributes' => array(
+      'class' => 'image-map-wrapper',
+    ),
+    'image' => $image,
+    'map' => $map,
+  );
+
+  // Beautytip. The .bt-content div is hidden by default via CSS.
+  $options['org_chart_chart'] = array(
+    'cssSelect' => 'area',
+    'contentSelector' => '$(".views-field-field-org-chart-org-title:contains(" + $(this).attr("alt") + ")").parent().find(".bt-content").html()',
+    'trigger' => array('mouseover', 'click'),
+    'style' => 'hulu',
+    'fill' => '#A6824B',
+    'trigger' => array('click'),
+  );
+  beautytips_add_beautytips($options);
+
+  // For the chart page, we render the graphic View and place it on the page,
+  // but hide it with CSS. The markup is used to populate Beauty Tips when
+  // an <area> if clicked.
+  $vars = array(
+    'view_name' => 'org_chart',
+    'display_id' => 'graphic',
+    'node' => $node,
+    'image_map' => $image_map,
+  );
+
+  return theme('org_chart', $vars);
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function gov_org_chart_node_update($node) {
+  // Flush the views arg cache for views displays that rely on this node as
+  // an argument.
+  // @todo Check into clearing the block cache for this block also.
+  if ($node->type == 'org_chart') {
+    views_arg_cache_flush('org_chart', 'list', $node->nid);
+    views_arg_cache_flush('org_chart', 'list_header', $node->nid);
+    views_arg_cache_flush('org_chart', 'graphic', $node->nid);
+  }
+}
+
+/**
+ * Returns tabs for the org chart node page.
+ *
+ * @param obj $node
+ *   An org_chart node.
+ *
+ * @return array
+ *   A renderable array of tabs.
+ */
+function gov_org_chart_tabs($node) {
+
+  $wrapper = entity_metadata_wrapper('node', $node);
+  $displays = $wrapper->field_org_chart_displays->value();
+
+  $tabs = array(
+    '#links' => array(
+      'list' => array(
+        'title' => 'List View',
+        'href' => "node/$node->nid",
+      ),
+    ),
+    '#theme' => 'links',
+  );
+
+  if (in_array('graphic', $displays)) {
+    $tabs['#links']['graphic'] = array(
+      'title' => 'Graphic View',
+      'href' => "node/$node->nid/graphic",
+    );
+  }
+  if (in_array('chart', $displays)) {
+    $tabs['#links']['chart'] = array(
+      'title' => 'Chart View',
+      'href' => "node/$node->nid/chart",
+    );
+  }
+
+  return $tabs;
+}

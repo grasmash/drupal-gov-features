@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * Install file for GOV Org Chart.
+ */
+
+/**
+ * Reverting feature.
+ */
+function gov_org_chart_update_7000(&$sandbox) {
+  features_revert_module('gov_org_chart');
+}
