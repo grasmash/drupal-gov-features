@@ -1,0 +1,155 @@
+<?php
+/**
+ * @file
+ * Code for the gov_purge feature.
+ *
+ * When authoring this module, I really missed an opportunity. It should have
+ * been called gov_purgery. I hope you can appreciate the joke after the fact.
+ */
+
+include_once 'gov_purge.features.inc';
+
+/**
+ * Implements hook_og_permission().
+ */
+function gov_purge_og_permission() {
+  $perms = array();
+  $perms['purge page block'] = array(
+    'title' => t('Purge page block'),
+    'description' => t('Provides a block that allows users to purge without
+      updating a piece of content.'),
+  );
+
+  return $perms;
+}
+
+/**
+ * Implements hook_acquia_purge_variations_alter().
+ */
+function gov_purge_acquia_purge_variations_alter($path, &$variations) {
+  // Purge redirects.
+  if (module_exists('redirect')) {
+    module_load_include('inc', 'gov_purge');
+    $redirect_paths = gov_purge_get_redirects_paths($path);
+
+    // If this is an alias, redirects for the system path also.
+    if ($system_path = drupal_lookup_path('source', ltrim($path, '/'))) {
+      $redirect_paths = gov_purge_get_redirects_paths(array($system_path));
+    }
+
+    $variations = array_merge($variations, $redirect_paths);
+  }
+}
+
+
+/**
+ * Implements hook_block_info().
+ */
+function gov_purge_block_info() {
+  return array(
+    'gov_purge_page' => array(
+      'info' => t('Purge current page) - Organic Groups'),
+      'cache' => DRUPAL_NO_CACHE,
+      'status' => 0,
+      'weight' => 1,
+      'visibility' => BLOCK_VISIBILITY_NOTLISTED,
+      'properties' => array('administrative' => TRUE),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function gov_purge_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'gov_purge_page':
+      $block = gov_purge_page_block_content();
+      break;
+
+  }
+
+  return $block;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function gov_purge_form_acquia_purge_manualpurge_form_full_alter(&$form, &$form_state, $form_id) {
+  // Disabling autocomplete because it does not work with file extension.
+  // @see JUS-2272.
+  foreach ($form['paths']['path'] as $key => $path) {
+    unset($form['paths']['path'][$key]['#autocomplete_path']);
+  }
+}
+
+/**
+ * Generates block content for gov_purge_page block.
+ *
+ * @return array
+ *   A renderable block array.
+ */
+function gov_purge_page_block_content() {
+  $access = FALSE;
+
+  // Check for global level permissions.
+  if (user_access('purge on-screen')) {
+    $access = TRUE;
+  }
+  // Otherwise, check for OG specific permission.
+  else {
+    $context = og_context();
+    if (!empty($context) && og_user_access($context['group_type'], $context['gid'], 'purge page block')) {
+      $access = TRUE;
+    }
+  }
+
+  // Do not show the block on the manual purge page.
+  if ($_GET['q'] == 'admin/config/development/performance/manualpurge') {
+    $access = FALSE;
+  }
+
+  if ($access) {
+    if (!_acquia_purge_are_we_allowed_to_purge()) {
+      return array(
+        'subject' => t('Purge current page'),
+        'content' => 'You must be on the Acquia Network to purge a page.',
+      );
+    }
+
+    // Load acquia_purge.admin.inc to be able to call our form callback.
+    module_load_include('inc', 'acquia_purge', 'acquia_purge.admin');
+    return array(
+      'subject' => t('Purge current page'),
+      'content' => drupal_get_form("acquia_purge_manualpurge_form_page"),
+    );
+  }
+
+  return array();
+}
+
+/**
+ * Implements hook_redirect_update().
+ */
+function gov_purge_redirect_update($redirect) {
+  module_load_include('inc', 'gov_purge');
+  gov_purge_purge_redirect($redirect);
+}
+
+/**
+ * Implements hook_redirect_insert().
+ */
+function gov_purge_redirect_insert($redirect) {
+  module_load_include('inc', 'gov_purge');
+  gov_purge_purge_redirect($redirect);
+}
+
+/**
+ * Implements hook_redirect_delete().
+ */
+function gov_purge_redirect_delete($redirect) {
+  module_load_include('inc', 'gov_purge');
+  gov_purge_purge_redirect($redirect);
+}
