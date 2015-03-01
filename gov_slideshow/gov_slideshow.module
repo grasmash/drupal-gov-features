@@ -1,0 +1,101 @@
+<?php
+/**
+ * @file
+ * Code for the GOV Slideshow feature.
+ *
+ * @package gov_slideshow
+ */
+
+include_once 'gov_slideshow.features.inc';
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function gov_slideshow_entity_info_alter(&$entity_info) {
+  $entity_info['fieldable_panels_pane']['bundles']['slideshow'] = array(
+    'label' => t('Slideshow'),
+    'pane category' => t('Fielded panes'),
+    'pane top level' => FALSE,
+    // 'pane icon' => '/path/to/custom/icon/for/this/pane.png',
+    'admin' => array(
+      'path' => 'admin/structure/fieldable-panels-panes/manage/%fieldable_panels_panes_type',
+      'bundle argument' => 4,
+      // Note that this has all _ replaced with - from the bundle name.
+      'real path' => 'admin/structure/fieldable-panels-panes/manage/slideshow',
+      'access arguments' => array('administer fieldable panels panes'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+function gov_slideshow_preprocess_field_slideshow(&$vars) {
+  if (!empty($vars['entity']->bundle) || !empty($vars['entity']->type)) {
+    $entity = $vars['entity'];
+    $entity_type = 'field_collection_item';
+    $bundle = !empty($entity->bundle) ? $entity->bundle : $entity->type;
+
+    // Allow field slideshows to be themed on a per-bundle layer. Unfortunately,
+    // these does not allow for specification of entity type. Use by creating
+    // tpl named like field-slideshow--bundle-name.tpl.php.
+    $vars['theme_hook_suggestions'][] = 'field_slideshow__' . $bundle;
+
+    // Add renderable field arrays to the the each slide. This allows
+    // render(some_field) to be called from the tpl.
+    foreach ($vars['items'] as $key => $item) {
+      $field_collection_item = field_collection_item_load($item['item_id']);
+      $vars['items'][$key][$entity_type] = $field_collection_item;
+      $children = element_children($item);
+      foreach ($children as $child) {
+        if (strpos($child, 'field_') !== FALSE && is_array($item[$child])) {
+          $field = field_view_field($entity_type, $field_collection_item, $child);
+          $vars['items'][$key]['loaded_fields'][$child] = $field;
+
+          // Create a download link for image fields.
+          if (!empty($field['#field_type']) && $field['#field_type'] == 'image' && !empty($field[0]['#item']['uri'])) {
+            $url = file_create_url($field[0]['#item']['uri']);
+            $vars['items'][$key]['loaded_fields'][$child]['download_link'] = l(t('Download original'), $url);
+          }
+        }
+      }
+
+      // Build CSS styles for width, color, and position. This relies on fields
+      // associated with the slideshow fieldable panel pane bundle.
+      if ($bundle == 'slideshow') {
+        $delta = 0;
+        $loaded_fields = &$vars['items'][$key]['loaded_fields'];
+        $vars['items'][$key]['style'] = array(
+          'text' => array(
+            'width' => render($loaded_fields['field_slide_text_width'][$delta]),
+            'color' =>  render($loaded_fields['field_slide_text_color'][$delta]),
+            'left' =>  render($loaded_fields['field_slide_text_position'][$delta])
+          ),
+        );
+        $vars['items'][$key]['style']['text']['css'] = gov_slideshow_convert_css_properties_to_string($vars['items'][$key]['style']['text']);
+      }
+    }
+  }
+}
+
+/**
+ * Converts an array of CSS properties to an inline style string.
+ *
+ * @param array $properties
+ *   An associative array of css properties mapped to values.
+ *
+ * @return string
+ *   A CSS string to be used as the value of an inline style.
+ */
+function gov_slideshow_convert_css_properties_to_string($properties) {
+  $css = '';
+
+  foreach ($properties as $property => $value) {
+    if (!$value) {
+      continue;
+    }
+    $css .= "$property: $value; ";
+  }
+
+  return $css;
+}

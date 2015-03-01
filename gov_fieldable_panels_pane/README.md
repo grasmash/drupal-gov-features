@@ -10,5 +10,7 @@ More specifically, it provides the following functionality:
     group *and* parent group of current group are made available for selection.
   * UI improvements to the FPP administration forms.
     * Enforce requirement of either a display title or admin title for each FPP.
+    * Force all FPPs to be reusable
+    * Hide confusing 'view_mode' field.
   * Simplified integration with features. Individual FPP entities are no longer
     exported via Features, thereby reducing bloat of features exports.
